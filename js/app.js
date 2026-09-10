@@ -24,6 +24,9 @@ const dragHandle = document.getElementById('dragHandle');
 const collapseBtn = document.getElementById('collapseBtn');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const restartBtn = document.getElementById('restartBtn');
+const useSampleBtn = document.getElementById('useSampleBtn');
+const fileInput = document.getElementById('fileInput');
 
 // ---- Drag-anywhere-on-screen support (touch + mouse via Pointer Events) ----
 function makeDraggable(handleEl, moveTargetEl, onTap) {
@@ -93,6 +96,58 @@ stopBtn.addEventListener('click', () => {
   stopBtn.disabled = true;
 });
 
+restartBtn.addEventListener('click', () => {
+  engine.postMessage({ type: 'restart' });
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+});
+
+// ---- Data source: synthetic sample (default) vs. an imported file ----
+// File reading happens here on the UI thread (Workers can't use the File
+// API the same way), gets normalized, then handed to the worker as plain
+// data via postMessage — the worker never touches the File object itself.
+useSampleBtn.addEventListener('click', () => {
+  engine.postMessage({ type: 'restart' }); // safest default: restart the bundled sample
+  setActiveSourceChip(useSampleBtn);
+  document.getElementById('datasetLabel').textContent = 'Synthetic sample (not real market data)';
+});
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const text = await file.text();
+  const { normalizeCandles, parseCandleCSV } = await import('./core/CandleNormalizer.js');
+
+  let candles;
+  try {
+    if (file.name.toLowerCase().endsWith('.json')) {
+      candles = normalizeCandles(JSON.parse(text));
+    } else {
+      candles = parseCandleCSV(text);
+    }
+  } catch (err) {
+    alert('Could not parse that file. Expected CSV with a header row (time,open,high,low,close) or a JSON array of candles.');
+    return;
+  }
+
+  if (!candles.length) {
+    alert('No valid candles found in that file after normalization.');
+    return;
+  }
+
+  engine.postMessage({ type: 'loadCandles', payload: { candles, label: file.name } });
+  setActiveSourceChip(fileInput.closest('.chip'));
+  document.getElementById('datasetLabel').textContent = `${file.name} (${candles.length} candles)`;
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+});
+
+function setActiveSourceChip(activeEl) {
+  document.querySelectorAll('.chip').forEach((c) => c.classList.remove('chip-active'));
+  if (activeEl) activeEl.classList.add('chip-active');
+}
+
 const STATE_LABELS = {
   STRONG_BUY: 'STRONG BUY', BUY: 'BUY', WAIT: 'WAIT',
   SELL: 'SELL', STRONG_SELL: 'STRONG SELL', NO_TRADE: 'NO TRADE',
@@ -109,6 +164,24 @@ function render(payload) {
   document.getElementById('tfVal').textContent = payload.timeframe;
   document.getElementById('marketVal').textContent = payload.marketStatus;
 
+  if (payload.dataset) {
+    document.getElementById('datasetLabel').textContent = payload.dataset;
+  }
+
+  const lastCandleVal = document.getElementById('lastCandleVal');
+  if (payload.lastCandle) {
+    const c = payload.lastCandle;
+    const t = new Date(c.time).toLocaleTimeString();
+    lastCandleVal.textContent = `${t}  O:${c.open.toFixed(5)} H:${c.high.toFixed(5)} L:${c.low.toFixed(5)} C:${c.close.toFixed(5)}`;
+  } else {
+    lastCandleVal.textContent = '--';
+  }
+
+  if (payload.marketStatus === 'CLOSED') {
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  }
+
   const stateEl = document.getElementById('signalState');
   stateEl.textContent = STATE_LABELS[payload.signalState] || payload.signalState;
   stateEl.className = 'signal-state ' + (STATE_CLASS[payload.signalState] || '');
@@ -120,7 +193,7 @@ function render(payload) {
   reasonsList.innerHTML = '';
   (payload.reasons || []).forEach((r) => {
     const li = document.createElement('li');
-    li.textContent = `\u2022 ${r}`;
+    li.textContent = `• ${r}`;
     reasonsList.appendChild(li);
   });
 
@@ -128,7 +201,7 @@ function render(payload) {
   warningsList.innerHTML = '';
   (payload.warnings || []).forEach((w) => {
     const li = document.createElement('li');
-    li.textContent = `\u26A0 ${w}`;
+    li.textContent = `⚠ ${w}`;
     warningsList.appendChild(li);
   });
 
