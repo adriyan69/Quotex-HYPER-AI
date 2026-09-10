@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#14161c" />
+  <title>Market AI Analyzer (Mock)</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="page">
+    <div id="pageHint">
+      Tap the floating icon to expand the analyzer.<br />
+      This is Phase 1 \u2014 MOCK data only, not connected to any real market.
+    </div>
+  </div>
+
+  <!-- Floating widget: collapsed circular icon -->
+  <div id="collapsed" class="collapsed">
+    <div id="collapsedSignal" class="collapsed-signal">--</div>
+    <div class="collapsed-label">AI</div>
+  </div>
+
+  <!-- Floating widget: expanded card -->
+  <div id="expanded" class="expanded hidden">
+    <div id="dragHandle" class="header">
+      <span class="title">MARKET AI (MOCK)</span>
+      <div class="header-actions">
+        <button id="collapseBtn" title="Collapse">\u2014</button>
+      </div>
+    </div>
+
+    <div class="status-row">
+      <span class="dot dot-gray"></span>
+      <span>MOCK MODE (Phase 1 \u2014 no real data source)</span>
+    </div>
+
+    <div class="meta-row">
+      <div><span class="meta-label">Asset</span><span id="assetVal">--</span></div>
+      <div><span class="meta-label">Timeframe</span><span id="tfVal">--</span></div>
+      <div><span class="meta-label">Market</span><span id="marketVal">--</span></div>
+    </div>
+
+    <div class="signal-block">
+      <div id="signalState" class="signal-state">NO TRADE</div>
+      <div class="strength-row">
+        <span>Signal strength</span>
+        <span id="strengthVal">0/100</span>
+      </div>
+      <div class="strength-bar"><div id="strengthFill" class="strength-fill"></div></div>
+    </div>
+
+    <div class="reasons">
+      <div class="reasons-title">Top reasons</div>
+      <ul id="reasonsList"></ul>
+    </div>
+
+    <div class="warnings">
+      <ul id="warningsList"></ul>
+    </div>
+
+    <div class="footer">
+      <button id="startBtn" class="btn btn-start">START</button>
+      <button id="stopBtn" class="btn btn-stop" disabled>STOP</button>
+    </div>
+
+    <div class="disclaimer">Analysis only \u2014 never places trades automatically.</div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
