@@ -83,6 +83,19 @@ html, body {
 .strength-bar { height: 6px; background: #23262f; border-radius: 4px; margin-top: 4px; overflow: hidden; }
 .strength-fill { height: 100%; width: 0%; background: #6b7fff; transition: width 0.3s ease; }
 
+.lastcandle-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: #8b90a0; margin-bottom: 10px; }
+.lastcandle-row #lastCandleVal { color: #d1d5db; font-family: monospace; font-size: 10px; }
+
+.data-source { margin-bottom: 12px; }
+.data-source-controls { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.chip {
+  font-size: 10px; padding: 6px 10px; border-radius: 20px;
+  background: #1c1f29; border: 1px solid #2b2f3a; color: #8b90a0;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.chip-active { border-color: #6b7fff; color: #d6dcff; }
+.chip-file { cursor: pointer; }
+
 .reasons { font-size: 12px; margin-bottom: 10px; }
 .reasons-title { color: #8b90a0; font-size: 9px; text-transform: uppercase; margin-bottom: 4px; }
 .reasons ul, .warnings ul { list-style: none; }
@@ -93,6 +106,7 @@ html, body {
 .btn { flex: 1; padding: 12px 0; border-radius: 10px; border: none; font-size: 13px; font-weight: 700; }
 .btn-start { background: #1f7a4d; color: #eafff2; }
 .btn-stop { background: #7a1f2b; color: #ffeaea; }
+.btn-restart { flex: 0 0 44px; background: #23262f; color: #d1d5db; font-size: 16px; }
 .btn:disabled { opacity: 0.4; }
 
 .disclaimer { font-size: 9px; color: #55596a; text-align: center; margin-top: 10px; }
