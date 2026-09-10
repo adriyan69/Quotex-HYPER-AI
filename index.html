@@ -14,7 +14,7 @@
   <div id="page">
     <div id="pageHint">
       Tap the floating icon to expand the analyzer.<br />
-      This is Phase 1 \u2014 MOCK data only, not connected to any real market.
+      Phase 2 — replaying real historical candle data (synthetic sample by default, or your own imported file). Signal scoring is still a placeholder, not connected to any real market.
     </div>
   </div>
 
@@ -27,21 +27,37 @@
   <!-- Floating widget: expanded card -->
   <div id="expanded" class="expanded hidden">
     <div id="dragHandle" class="header">
-      <span class="title">MARKET AI (MOCK)</span>
+      <span class="title">MARKET AI (REPLAY)</span>
       <div class="header-actions">
-        <button id="collapseBtn" title="Collapse">\u2014</button>
+        <button id="collapseBtn" title="Collapse">—</button>
       </div>
     </div>
 
     <div class="status-row">
       <span class="dot dot-gray"></span>
-      <span>MOCK MODE (Phase 1 \u2014 no real data source)</span>
+      <span id="datasetLabel">Synthetic sample (not real market data)</span>
     </div>
 
     <div class="meta-row">
       <div><span class="meta-label">Asset</span><span id="assetVal">--</span></div>
       <div><span class="meta-label">Timeframe</span><span id="tfVal">--</span></div>
       <div><span class="meta-label">Market</span><span id="marketVal">--</span></div>
+    </div>
+
+    <div class="lastcandle-row" id="lastCandleRow">
+      <span class="meta-label">Last replayed candle</span>
+      <span id="lastCandleVal">--</span>
+    </div>
+
+    <div class="data-source">
+      <div class="reasons-title">Data source</div>
+      <div class="data-source-controls">
+        <button id="useSampleBtn" class="chip chip-active">Synthetic sample</button>
+        <label class="chip chip-file">
+          Import file
+          <input type="file" id="fileInput" accept=".csv,.json" hidden />
+        </label>
+      </div>
     </div>
 
     <div class="signal-block">
@@ -65,9 +81,10 @@
     <div class="footer">
       <button id="startBtn" class="btn btn-start">START</button>
       <button id="stopBtn" class="btn btn-stop" disabled>STOP</button>
+      <button id="restartBtn" class="btn btn-restart" title="Restart replay from the beginning">↺</button>
     </div>
 
-    <div class="disclaimer">Analysis only \u2014 never places trades automatically.</div>
+    <div class="disclaimer">Analysis only — never places trades automatically.</div>
   </div>
 
   <script type="module" src="js/app.js"></script>
