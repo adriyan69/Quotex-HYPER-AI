@@ -1,0 +1,98 @@
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: #0b0c10;
+  color: #e6e8ee;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#page {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+#pageHint {
+  text-align: center; font-size: 13px; color: #6b7280; max-width: 260px; line-height: 1.5;
+}
+
+.hidden { display: none !important; }
+
+/* ---- Collapsed floating icon ---- */
+.collapsed {
+  position: fixed;
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: #14161c;
+  border: 2px solid #2b2f3a;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  touch-action: none;
+  z-index: 1000;
+  right: 16px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+.collapsed-signal { font-size: 10px; font-weight: 700; }
+.collapsed-label { font-size: 8px; color: #8b90a0; margin-top: 2px; }
+
+/* ---- Expanded floating card ---- */
+.expanded {
+  position: fixed;
+  right: 12px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: min(92vw, 340px);
+  max-height: 80vh;
+  background: #14161c;
+  border: 1px solid #2b2f3a;
+  border-radius: 16px;
+  display: flex; flex-direction: column;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+  z-index: 1000;
+  touch-action: none;
+  overflow-y: auto;
+}
+
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 8px; border-bottom: 1px solid #23262f;
+  touch-action: none;
+}
+.title { font-size: 12px; font-weight: 700; letter-spacing: 0.4px; color: #9fb4ff; }
+.header-actions button {
+  background: none; border: none; color: #8b90a0; font-size: 16px; padding: 4px 8px;
+}
+
+.status-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #8b90a0; margin: 10px 0; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot-gray { background: #6b7280; }
+
+.meta-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 12px; }
+.meta-row > div { display: flex; flex-direction: column; gap: 2px; }
+.meta-label { font-size: 9px; color: #8b90a0; text-transform: uppercase; }
+
+.signal-block { text-align: center; margin: 6px 0 12px; }
+.signal-state { font-size: 24px; font-weight: 800; letter-spacing: 1px; padding: 6px 0; color: #d1d5db; }
+.signal-state.state-strong-buy, .signal-state.state-buy { color: #22c55e; }
+.signal-state.state-strong-sell, .signal-state.state-sell { color: #ef4444; }
+.signal-state.state-wait { color: #eab308; }
+.signal-state.state-no-trade { color: #8b90a0; }
+
+.strength-row { display: flex; justify-content: space-between; font-size: 11px; color: #8b90a0; margin-top: 4px; }
+.strength-bar { height: 6px; background: #23262f; border-radius: 4px; margin-top: 4px; overflow: hidden; }
+.strength-fill { height: 100%; width: 0%; background: #6b7fff; transition: width 0.3s ease; }
+
+.reasons { font-size: 12px; margin-bottom: 10px; }
+.reasons-title { color: #8b90a0; font-size: 9px; text-transform: uppercase; margin-bottom: 4px; }
+.reasons ul, .warnings ul { list-style: none; }
+.reasons li { padding: 3px 0; }
+.warnings { font-size: 11px; color: #f59e0b; margin-bottom: 12px; }
+
+.footer { display: flex; gap: 10px; margin-top: 6px; }
+.btn { flex: 1; padding: 12px 0; border-radius: 10px; border: none; font-size: 13px; font-weight: 700; }
+.btn-start { background: #1f7a4d; color: #eafff2; }
+.btn-stop { background: #7a1f2b; color: #ffeaea; }
+.btn:disabled { opacity: 0.4; }
+
+.disclaimer { font-size: 9px; color: #55596a; text-align: center; margin-top: 10px; }
