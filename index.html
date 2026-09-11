@@ -14,7 +14,7 @@
   <div id="page">
     <div id="pageHint">
       Tap the floating icon to expand the analyzer.<br />
-      Phase 2 — replaying real historical candle data (synthetic sample by default, or your own imported file). Signal scoring is still a placeholder, not connected to any real market.
+      Phase 3 — real technical indicators (EMA/RSI/MACD/ATR/Bollinger/ROC) computed from the replayed candle history. Signal state/strength are still a placeholder — real scoring arrives in Phase 5.
     </div>
   </div>
 
@@ -27,7 +27,7 @@
   <!-- Floating widget: expanded card -->
   <div id="expanded" class="expanded hidden">
     <div id="dragHandle" class="header">
-      <span class="title">MARKET AI (REPLAY)</span>
+      <span class="title">MARKET AI (INDICATORS)</span>
       <div class="header-actions">
         <button id="collapseBtn" title="Collapse">—</button>
       </div>
@@ -47,6 +47,16 @@
     <div class="lastcandle-row" id="lastCandleRow">
       <span class="meta-label">Last replayed candle</span>
       <span id="lastCandleVal">--</span>
+    </div>
+
+    <div class="indicators">
+      <div class="reasons-title">Indicators</div>
+      <div class="ind-row"><span>Trend</span><span id="indTrend" class="ind-val">--</span></div>
+      <div class="ind-row"><span>RSI (14)</span><span id="indRsi" class="ind-val">--</span></div>
+      <div class="ind-row"><span>MACD</span><span id="indMacd" class="ind-val">--</span></div>
+      <div class="ind-row"><span>ROC (9)</span><span id="indRoc" class="ind-val">--</span></div>
+      <div class="ind-row"><span>ATR (14)</span><span id="indAtr" class="ind-val">--</span></div>
+      <div class="ind-row"><span>Bollinger</span><span id="indBollinger" class="ind-val">--</span></div>
     </div>
 
     <div class="data-source">

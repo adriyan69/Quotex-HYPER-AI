@@ -1,4 +1,4 @@
-const CACHE_NAME = 'market-ai-shell-v2';
+const CACHE_NAME = 'market-ai-shell-v3';
 
 const SHELL_ASSETS = [
   './',
@@ -11,6 +11,13 @@ const SHELL_ASSETS = [
   './js/core/ReplayDataProvider.js',
   './js/core/CandleNormalizer.js',
   './js/core/sampleData.js',
+  './js/indicators/ema.js',
+  './js/indicators/rsi.js',
+  './js/indicators/macd.js',
+  './js/indicators/atr.js',
+  './js/indicators/bollinger.js',
+  './js/indicators/roc.js',
+  './js/indicators/index.js',
   './js/worker/engine.worker.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
