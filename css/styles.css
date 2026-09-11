@@ -86,6 +86,14 @@ html, body {
 .lastcandle-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: #8b90a0; margin-bottom: 10px; }
 .lastcandle-row #lastCandleVal { color: #d1d5db; font-family: monospace; font-size: 10px; }
 
+.indicators { font-size: 11px; margin-bottom: 12px; }
+.ind-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #1c1f29; color: #8b90a0; }
+.ind-row:last-child { border-bottom: none; }
+.ind-val { color: #d1d5db; font-weight: 600; }
+.ind-val.ind-bullish { color: #22c55e; }
+.ind-val.ind-bearish { color: #ef4444; }
+.ind-val.ind-neutral { color: #eab308; }
+
 .data-source { margin-bottom: 12px; }
 .data-source-controls { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .chip {
