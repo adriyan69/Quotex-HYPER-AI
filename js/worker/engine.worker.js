@@ -1,8 +1,7 @@
 import { ReplayDataProvider } from '../core/ReplayDataProvider.js';
 import { sampleCandles } from '../core/sampleData.js';
 import { normalizeCandles } from '../core/CandleNormalizer.js';
-import { IndicatorEngine } from '../indicators/index.js';
-import { StructureEngine } from '../structure/marketStructure.js';
+import { RealtimeEngine } from '../engine/RealtimeEngine.js';
 import { ScoringEngine } from '../signal/scoringEngine.js';
 
 // The engine only ever talks to a MarketDataProvider through its interface.
@@ -15,28 +14,32 @@ import { ScoringEngine } from '../signal/scoringEngine.js';
 // nothing downstream should ever see anything but the canonical
 // {time, open, high, low, close} shape.
 let provider = new ReplayDataProvider(normalizeCandles(sampleCandles), { intervalMs: 2000, label: 'synthetic sample' });
+let rt = new RealtimeEngine({ lookback: 3 });
 let unsubscribe = null;
 let running = false;
 let currentDatasetLabel = 'Synthetic sample (not real market data)';
 
-const indicatorEngine = new IndicatorEngine();
-const structureEngine = new StructureEngine({ lookback: 3 });
 const scoringEngine = new ScoringEngine();
 
-// As of Phase 5, signal state/strength are REAL: computed by ScoringEngine
-// from the weighted multi-confirmation system (trend/momentum/structure/
-// price-action/S-R, reinforced-not-initiated by volatility regime). It is
-// NOT backtested or paper-traded yet (Phases 9-10), so "signal strength"
-// must never be read as a win probability — it's an evidence score out of
-// 100, nothing more, until real logged outcomes say otherwise.
+// Phase 6: the real-time loop. Every new candle now costs O(1)/O(lookback)
+// work in RealtimeEngine instead of re-scanning the full candle history
+// (verified numerically identical to the old full-recompute approach across
+// every tick of the sample dataset before this shipped). Steps 7-14 of the
+// spec's real-time loop (score -> check conflicts -> determine signal ->
+// update UI) happen here in buildPayload, using RealtimeEngine's output.
 
-async function buildPayload(candle, marketStatus) {
-  const candles = await provider.getCandles('sample', '1m', 300);
-  const indicators = indicatorEngine.compute(candles);
-  const structure = structureEngine.compute(candles);
-  const signal = marketStatus === 'CLOSED'
-    ? { state: 'NO_TRADE', strength: 0, reasons: ['Replay stopped'], warnings: [] }
-    : scoringEngine.compute(candles, indicators, structure);
+async function seedFromProvider() {
+  rt = new RealtimeEngine({ lookback: 3 });
+  const primingCandles = await provider.getCandles('sample', '1m', 10_000);
+  rt.prime(primingCandles);
+}
+
+function buildPayload(indicatorsAndStructure, marketStatus) {
+  const { indicators, structure } = indicatorsAndStructure;
+  const signal =
+    marketStatus === 'CLOSED'
+      ? { state: 'NO_TRADE', strength: 0, buyScore: 0, sellScore: 0, reasons: ['Replay stopped'], warnings: [] }
+      : scoringEngine.compute(rt.recentCandles, indicators, structure, rt.atrHistory);
 
   const warnings = [...signal.warnings];
   if (marketStatus === 'CLOSED') {
@@ -44,6 +47,9 @@ async function buildPayload(candle, marketStatus) {
   }
   if (indicators.candleCount < 200) {
     warnings.push(`EMA200 needs 200 candles (have ${indicators.candleCount}) — reported as insufficient until then`);
+  }
+  if (rt.invalidCount > 0) {
+    warnings.push(`${rt.invalidCount} malformed candle(s) were received and skipped`);
   }
   warnings.push('Not backtested/paper-traded yet — strength is an evidence score, not a win probability (Phase 9-10)');
 
@@ -56,7 +62,7 @@ async function buildPayload(candle, marketStatus) {
     strength: signal.strength,
     buyScore: signal.buyScore ?? 0,
     sellScore: signal.sellScore ?? 0,
-    lastCandle: candle || null,
+    lastCandle: rt.lastCandle,
     indicators,
     structure,
     reasons: signal.reasons,
@@ -67,22 +73,26 @@ async function buildPayload(candle, marketStatus) {
 
 async function postCurrentSnapshot() {
   const status = await provider.getMarketStatus();
-  const candles = await provider.getCandles('sample', '1m', 1);
-  const lastCandle = candles[candles.length - 1] || null;
-  self.postMessage(await buildPayload(lastCandle, status.status));
+  if (!rt.lastCandle) {
+    // Nothing ingested yet (e.g. right after loading a dataset with too few
+    // candles to prime). Post a minimal "not enough data" payload rather
+    // than crashing on a null candle.
+    self.postMessage(buildPayload({ indicators: emptyIndicators(), structure: emptyStructure() }, status.status));
+    return;
+  }
+  const snapshot = { indicators: rt.lastIndicators, structure: rt.lastStructure };
+  self.postMessage(buildPayload(snapshot, status.status));
 }
 
 self.onmessage = async (e) => {
   const { type, payload } = e.data || {};
 
   if (type === 'loadCandles') {
-    // Swap the replay dataset (e.g. a file the user imported on the UI
-    // thread and normalized before sending it here). Stops any running
-    // replay first.
     if (unsubscribe) unsubscribe();
     running = false;
     provider = new ReplayDataProvider(payload.candles, { intervalMs: 2000, label: payload.label });
     currentDatasetLabel = payload.label || 'Imported dataset';
+    await seedFromProvider();
     await postCurrentSnapshot();
     return;
   }
@@ -90,16 +100,24 @@ self.onmessage = async (e) => {
   if (type === 'start') {
     if (running) return;
     running = true;
-    unsubscribe = provider.subscribeToRealtimeData('sample', '1m', async (event) => {
+    if (!rt.lastCandle) {
+      // First start (or after loadCandles/restart already reseeded) — prime
+      // once. Resuming after a plain STOP reuses the existing rt state as-is
+      // instead of re-priming from scratch.
+      await seedFromProvider();
+    }
+    unsubscribe = provider.subscribeToRealtimeData('sample', '1m', (event) => {
       if (event.type === 'end') {
-        await postCurrentSnapshot();
+        postCurrentSnapshot();
         running = false;
         return;
       }
-      const status = await provider.getMarketStatus();
-      self.postMessage(await buildPayload(event.candle, status.status));
+      rt.ingest(event.candle);
+      provider.getMarketStatus().then((status) => {
+        self.postMessage(buildPayload({ indicators: rt.lastIndicators, structure: rt.lastStructure }, status.status));
+      });
     });
-    await postCurrentSnapshot(); // immediate first update
+    await postCurrentSnapshot(); // immediate first update, using the primed state
   }
 
   if (type === 'stop') {
@@ -114,6 +132,29 @@ self.onmessage = async (e) => {
     if (unsubscribe) unsubscribe();
     unsubscribe = null;
     provider.reset();
+    await seedFromProvider();
     await postCurrentSnapshot();
   }
 };
+
+function emptyIndicators() {
+  return {
+    candleCount: 0,
+    trend: { ema9: null, ema21: null, ema50: null, ema200: null, label: 'Insufficient data' },
+    momentum: {
+      rsi: null, rsiLabel: 'Insufficient data',
+      macd: { macdLine: null, signalLine: null, histogram: null }, macdLabel: 'Insufficient data',
+      roc: null, rocLabel: 'Insufficient data',
+    },
+    volatility: { atr: null, bollinger: { upper: null, middle: null, lower: null }, bollingerLabel: 'Insufficient data' },
+  };
+}
+
+function emptyStructure() {
+  return {
+    swingHighCount: 0, swingLowCount: 0,
+    lastSwingHigh: null, lastSwingLow: null,
+    bias: 'INSUFFICIENT', biasLabel: 'Insufficient data',
+    event: null, recentSequence: [],
+  };
+}
