@@ -74,7 +74,7 @@ export class IndicatorEngine {
   }
 }
 
-function trendLabel(ema9, ema21, ema50, ema200) {
+export function trendLabel(ema9, ema21, ema50, ema200) {
   if (ema9 === null || ema21 === null || ema50 === null) return 'Insufficient data';
   if (ema200 === null) {
     // Still meaningful with the shorter EMAs even before EMA200 is defined.
@@ -87,21 +87,21 @@ function trendLabel(ema9, ema21, ema50, ema200) {
   return 'Mixed';
 }
 
-function rsiLabel(v) {
+export function rsiLabel(v) {
   if (v === null) return 'Insufficient data';
   if (v >= 70) return 'Overbought';
   if (v <= 30) return 'Oversold';
   return 'Neutral';
 }
 
-function macdLabel(histogram) {
+export function macdLabel(histogram) {
   if (histogram === null) return 'Insufficient data';
   if (histogram > 0) return 'Bullish momentum';
   if (histogram < 0) return 'Bearish momentum';
   return 'Flat';
 }
 
-function bollingerLabel(close, upper, lower) {
+export function bollingerLabel(close, upper, lower) {
   if (close === null || upper === null || lower === null) return 'Insufficient data';
   if (close > upper) return 'Above upper band';
   if (close < lower) return 'Below lower band';
