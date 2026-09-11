@@ -3,6 +3,7 @@ import { sampleCandles } from '../core/sampleData.js';
 import { normalizeCandles } from '../core/CandleNormalizer.js';
 import { IndicatorEngine } from '../indicators/index.js';
 import { StructureEngine } from '../structure/marketStructure.js';
+import { ScoringEngine } from '../signal/scoringEngine.js';
 
 // The engine only ever talks to a MarketDataProvider through its interface.
 // Right now that's ReplayDataProvider fed by either the bundled synthetic
@@ -20,75 +21,45 @@ let currentDatasetLabel = 'Synthetic sample (not real market data)';
 
 const indicatorEngine = new IndicatorEngine();
 const structureEngine = new StructureEngine({ lookback: 3 });
+const scoringEngine = new ScoringEngine();
 
-// Signal state/strength are STILL a placeholder — Phase 5 replaces this
-// with the real weighted multi-confirmation scoring engine (trend/momentum/
-// structure/price-action/S-R/volatility). What's real as of Phase 4 is
-// indicator math + market-structure detection (BOS/CHoCH), and the labels
-// built from both.
-const STATES = ['STRONG_BUY', 'BUY', 'WAIT', 'SELL', 'STRONG_SELL', 'NO_TRADE'];
-
-function buildReasons(indicators, structure) {
-  const reasons = [];
-
-  // Structure events are the most information-dense single fact available
-  // right now, so they lead when present.
-  if (structure.event) {
-    reasons.push(`Structure: ${structure.event.label}`);
-  } else if (structure.bias !== 'INSUFFICIENT') {
-    reasons.push(`Structure bias: ${structure.biasLabel}`);
-  }
-
-  if (indicators.trend.label !== 'Insufficient data') {
-    reasons.push(`Trend (EMA alignment): ${indicators.trend.label}`);
-  }
-  if (indicators.momentum.rsi !== null) {
-    reasons.push(`RSI ${indicators.momentum.rsi.toFixed(1)}: ${indicators.momentum.rsiLabel}`);
-  }
-  if (indicators.momentum.macd.histogram !== null) {
-    reasons.push(`MACD histogram ${indicators.momentum.macd.histogram.toFixed(6)}: ${indicators.momentum.macdLabel}`);
-  }
-  if (indicators.volatility.bollingerLabel !== 'Insufficient data') {
-    reasons.push(`Bollinger: ${indicators.volatility.bollingerLabel}`);
-  }
-
-  if (!reasons.length) reasons.push('Not enough candle history yet for indicators/structure to be defined.');
-  return reasons.slice(0, 3);
-}
+// As of Phase 5, signal state/strength are REAL: computed by ScoringEngine
+// from the weighted multi-confirmation system (trend/momentum/structure/
+// price-action/S-R, reinforced-not-initiated by volatility regime). It is
+// NOT backtested or paper-traded yet (Phases 9-10), so "signal strength"
+// must never be read as a win probability — it's an evidence score out of
+// 100, nothing more, until real logged outcomes say otherwise.
 
 async function buildPayload(candle, marketStatus) {
   const candles = await provider.getCandles('sample', '1m', 300);
   const indicators = indicatorEngine.compute(candles);
   const structure = structureEngine.compute(candles);
+  const signal = marketStatus === 'CLOSED'
+    ? { state: 'NO_TRADE', strength: 0, reasons: ['Replay stopped'], warnings: [] }
+    : scoringEngine.compute(candles, indicators, structure);
 
-  const state = marketStatus === 'CLOSED' ? 'NO_TRADE' : STATES[Math.floor(Math.random() * STATES.length)];
-  const strength = marketStatus === 'CLOSED' ? 0 : Math.floor(30 + Math.random() * 60);
-
-  const warnings = [];
+  const warnings = [...signal.warnings];
   if (marketStatus === 'CLOSED') {
     warnings.push('Replay data exhausted — tap RESTART to replay from the beginning');
-  } else {
-    warnings.push('Signal state/strength are still placeholder/random — real scoring arrives in Phase 5');
   }
   if (indicators.candleCount < 200) {
     warnings.push(`EMA200 needs 200 candles (have ${indicators.candleCount}) — reported as insufficient until then`);
   }
-  if (structure.bias === 'INSUFFICIENT') {
-    warnings.push('Not enough confirmed swing points yet for market-structure bias');
-  }
+  warnings.push('Not backtested/paper-traded yet — strength is an evidence score, not a win probability (Phase 9-10)');
 
   return {
-    mock: true,
     dataset: currentDatasetLabel,
     asset: 'EUR/USD (sample)',
     timeframe: '1M',
     marketStatus,
-    signalState: state,
-    strength,
+    signalState: signal.state,
+    strength: signal.strength,
+    buyScore: signal.buyScore ?? 0,
+    sellScore: signal.sellScore ?? 0,
     lastCandle: candle || null,
     indicators,
     structure,
-    reasons: buildReasons(indicators, structure),
+    reasons: signal.reasons,
     warnings,
     timestamp: new Date().toISOString(),
   };
