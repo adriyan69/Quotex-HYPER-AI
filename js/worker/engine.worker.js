@@ -2,6 +2,7 @@ import { ReplayDataProvider } from '../core/ReplayDataProvider.js';
 import { sampleCandles } from '../core/sampleData.js';
 import { normalizeCandles } from '../core/CandleNormalizer.js';
 import { IndicatorEngine } from '../indicators/index.js';
+import { StructureEngine } from '../structure/marketStructure.js';
 
 // The engine only ever talks to a MarketDataProvider through its interface.
 // Right now that's ReplayDataProvider fed by either the bundled synthetic
@@ -18,15 +19,26 @@ let running = false;
 let currentDatasetLabel = 'Synthetic sample (not real market data)';
 
 const indicatorEngine = new IndicatorEngine();
+const structureEngine = new StructureEngine({ lookback: 3 });
 
 // Signal state/strength are STILL a placeholder — Phase 5 replaces this
 // with the real weighted multi-confirmation scoring engine (trend/momentum/
-// structure/price-action/S-R/volatility). What's real as of Phase 3 is the
-// indicator math itself and the per-indicator labels built from it.
+// structure/price-action/S-R/volatility). What's real as of Phase 4 is
+// indicator math + market-structure detection (BOS/CHoCH), and the labels
+// built from both.
 const STATES = ['STRONG_BUY', 'BUY', 'WAIT', 'SELL', 'STRONG_SELL', 'NO_TRADE'];
 
-function buildReasons(indicators) {
+function buildReasons(indicators, structure) {
   const reasons = [];
+
+  // Structure events are the most information-dense single fact available
+  // right now, so they lead when present.
+  if (structure.event) {
+    reasons.push(`Structure: ${structure.event.label}`);
+  } else if (structure.bias !== 'INSUFFICIENT') {
+    reasons.push(`Structure bias: ${structure.biasLabel}`);
+  }
+
   if (indicators.trend.label !== 'Insufficient data') {
     reasons.push(`Trend (EMA alignment): ${indicators.trend.label}`);
   }
@@ -39,13 +51,15 @@ function buildReasons(indicators) {
   if (indicators.volatility.bollingerLabel !== 'Insufficient data') {
     reasons.push(`Bollinger: ${indicators.volatility.bollingerLabel}`);
   }
-  if (!reasons.length) reasons.push('Not enough candle history yet for indicators to be defined.');
+
+  if (!reasons.length) reasons.push('Not enough candle history yet for indicators/structure to be defined.');
   return reasons.slice(0, 3);
 }
 
 async function buildPayload(candle, marketStatus) {
   const candles = await provider.getCandles('sample', '1m', 300);
   const indicators = indicatorEngine.compute(candles);
+  const structure = structureEngine.compute(candles);
 
   const state = marketStatus === 'CLOSED' ? 'NO_TRADE' : STATES[Math.floor(Math.random() * STATES.length)];
   const strength = marketStatus === 'CLOSED' ? 0 : Math.floor(30 + Math.random() * 60);
@@ -59,6 +73,9 @@ async function buildPayload(candle, marketStatus) {
   if (indicators.candleCount < 200) {
     warnings.push(`EMA200 needs 200 candles (have ${indicators.candleCount}) — reported as insufficient until then`);
   }
+  if (structure.bias === 'INSUFFICIENT') {
+    warnings.push('Not enough confirmed swing points yet for market-structure bias');
+  }
 
   return {
     mock: true,
@@ -70,7 +87,8 @@ async function buildPayload(candle, marketStatus) {
     strength,
     lastCandle: candle || null,
     indicators,
-    reasons: buildReasons(indicators),
+    structure,
+    reasons: buildReasons(indicators, structure),
     warnings,
     timestamp: new Date().toISOString(),
   };
