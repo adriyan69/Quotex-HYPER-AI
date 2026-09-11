@@ -183,6 +183,7 @@ function render(payload) {
   }
 
   renderIndicators(payload.indicators);
+  renderStructure(payload.structure);
 
   const stateEl = document.getElementById('signalState');
   stateEl.textContent = STATE_LABELS[payload.signalState] || payload.signalState;
@@ -259,5 +260,38 @@ function renderIndicators(indicators) {
     'indBollinger',
     indicators.volatility.bollingerLabel,
     toneFromLabel(indicators.volatility.bollingerLabel)
+  );
+}
+
+function toneFromBiasOrEvent(text) {
+  if (!text) return null;
+  const l = text.toLowerCase();
+  if (l.includes('bullish') || l.includes('uptrend')) return 'ind-bullish';
+  if (l.includes('bearish') || l.includes('downtrend')) return 'ind-bearish';
+  if (l.includes('ranging') || l.includes('choch')) return 'ind-neutral';
+  return null;
+}
+
+function renderStructure(structure) {
+  if (!structure) return;
+
+  setIndVal('structBias', structure.biasLabel, toneFromBiasOrEvent(structure.biasLabel));
+
+  setIndVal(
+    'structEvent',
+    structure.event ? structure.event.label : 'No BOS/CHoCH yet',
+    structure.event ? toneFromBiasOrEvent(structure.event.label) : null
+  );
+
+  setIndVal(
+    'structSwingHigh',
+    structure.lastSwingHigh ? `${structure.lastSwingHigh.price.toFixed(5)} (${structure.lastSwingHigh.label ?? '--'})` : '--',
+    null
+  );
+
+  setIndVal(
+    'structSwingLow',
+    structure.lastSwingLow ? `${structure.lastSwingLow.price.toFixed(5)} (${structure.lastSwingLow.label ?? '--'})` : '--',
+    null
   );
 }
