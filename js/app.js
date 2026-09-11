@@ -191,6 +191,8 @@ function render(payload) {
 
   document.getElementById('strengthVal').textContent = `${payload.strength}/100`;
   document.getElementById('strengthFill').style.width = `${payload.strength}%`;
+  document.getElementById('buyScoreVal').textContent = `BUY ${payload.buyScore ?? 0}`;
+  document.getElementById('sellScoreVal').textContent = `SELL ${payload.sellScore ?? 0}`;
 
   const reasonsList = document.getElementById('reasonsList');
   reasonsList.innerHTML = '';
