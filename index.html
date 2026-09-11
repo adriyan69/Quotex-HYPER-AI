@@ -14,7 +14,7 @@
   <div id="page">
     <div id="pageHint">
       Tap the floating icon to expand the analyzer.<br />
-      Phase 5 — the real weighted multi-confirmation scoring engine is live: trend, momentum, structure, price action, support/resistance, and volatility now combine into an actual BUY/SELL/WAIT/NO TRADE signal. Not yet backtested or paper-traded (Phases 9-10) — strength is an evidence score, not a win probability.
+      Phase 6 — the analysis loop is now fully incremental: each new candle updates indicators/structure in O(1) instead of re-scanning all history, verified to match the old full-recompute results exactly. Not yet backtested or paper-traded (Phases 9-10) — strength is an evidence score, not a win probability.
     </div>
   </div>
 
@@ -27,7 +27,7 @@
   <!-- Floating widget: expanded card -->
   <div id="expanded" class="expanded hidden">
     <div id="dragHandle" class="header">
-      <span class="title">MARKET AI (SCORING)</span>
+      <span class="title">MARKET AI (REALTIME)</span>
       <div class="header-actions">
         <button id="collapseBtn" title="Collapse">—</button>
       </div>
