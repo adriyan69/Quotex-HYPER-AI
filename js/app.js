@@ -1,3 +1,5 @@
+import { AlertManager } from './alerts/alertManager.js';
+
 // ---- Service worker registration (required for installability) ----
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -27,6 +29,104 @@ const stopBtn = document.getElementById('stopBtn');
 const restartBtn = document.getElementById('restartBtn');
 const useSampleBtn = document.getElementById('useSampleBtn');
 const fileInput = document.getElementById('fileInput');
+const notifyBtn = document.getElementById('notifyBtn');
+
+// ---- Alerts: dedup/cooldown decision (AlertManager) + the actual
+// notification/sound/visual-flash triggering (this file, UI thread only —
+// Notification/Audio/DOM APIs aren't available inside the Web Worker).
+const alertManager = new AlertManager({ minStrength: 70, cooldownMs: 60_000 });
+let audioCtx = null;
+
+function unlockAudio() {
+  // Browsers block audio until a user gesture "unlocks" it. Start/notifyBtn
+  // clicks are real user gestures, so create/resume the AudioContext there
+  // rather than waiting until an alert actually needs to play a sound.
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) audioCtx = new Ctx();
+  }
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playAlertTone(direction) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = direction === 'bearish' ? 440 : 880; // lower tone for SELL, higher for BUY
+  gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.35);
+}
+
+function flashAlert(direction) {
+  const cls = direction === 'bearish' ? 'alert-flash-sell' : 'alert-flash-buy';
+  [collapsedEl, expandedEl].forEach((el) => {
+    el.classList.add(cls);
+    setTimeout(() => el.classList.remove(cls), 1500);
+  });
+}
+
+async function showAlertNotification(payload) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  const title = `${STATE_LABELS[payload.signalState] || payload.signalState} \u2014 ${payload.strength}/100`;
+  const time = new Date(payload.timestamp).toLocaleTimeString();
+  const options = {
+    body: `${payload.asset} \u00b7 ${payload.timeframe}\n${payload.reasons?.[0] || ''}\nSignal time: ${time}`,
+    icon: 'icons/icon-192.png',
+    tag: 'market-ai-signal', // replaces any previous notification instead of stacking
+  };
+
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) {
+      await reg.showNotification(title, options);
+      return;
+    }
+  } catch (err) {
+    // fall through to the plain Notification constructor
+  }
+  try {
+    new Notification(title, options);
+  } catch (err) {
+    console.error('Notification failed', err);
+  }
+}
+
+function triggerAlert(payload) {
+  const direction = payload.signalState.includes('SELL') ? 'bearish' : 'bullish';
+  flashAlert(direction);
+  playAlertTone(direction);
+  showAlertNotification(payload);
+}
+
+notifyBtn.addEventListener('click', async () => {
+  unlockAudio();
+  if (!('Notification' in window)) {
+    notifyBtn.textContent = 'Notifications unsupported';
+    return;
+  }
+  const result = await Notification.requestPermission();
+  updateNotifyBtn(result);
+});
+
+function updateNotifyBtn(permission) {
+  if (permission === 'granted') {
+    notifyBtn.textContent = 'Notifications on';
+    notifyBtn.classList.add('chip-active');
+  } else if (permission === 'denied') {
+    notifyBtn.textContent = 'Notifications blocked';
+    notifyBtn.classList.remove('chip-active');
+  } else {
+    notifyBtn.textContent = 'Enable notifications';
+    notifyBtn.classList.remove('chip-active');
+  }
+}
+if ('Notification' in window) updateNotifyBtn(Notification.permission);
+else notifyBtn.textContent = 'Notifications unsupported';
 
 // ---- Drag-anywhere-on-screen support (touch + mouse via Pointer Events) ----
 function makeDraggable(handleEl, moveTargetEl, onTap) {
@@ -85,6 +185,7 @@ function setExpanded(expanded) {
 const engine = new Worker('js/worker/engine.worker.js', { type: 'module' });
 
 startBtn.addEventListener('click', () => {
+  unlockAudio();
   engine.postMessage({ type: 'start' });
   startBtn.disabled = true;
   stopBtn.disabled = false;
@@ -163,6 +264,10 @@ function render(payload) {
   document.getElementById('assetVal').textContent = payload.asset;
   document.getElementById('tfVal').textContent = payload.timeframe;
   document.getElementById('marketVal').textContent = payload.marketStatus;
+
+  if (alertManager.shouldAlert(payload)) {
+    triggerAlert(payload);
+  }
 
   if (payload.dataset) {
     document.getElementById('datasetLabel').textContent = payload.dataset;
