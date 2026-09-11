@@ -24,7 +24,12 @@ export class ReplayDataProvider extends MarketDataProvider {
   constructor(candles, options = {}) {
     super();
     this._candles = candles;
-    this._index = Math.min(20, candles.length); // prime with a small history so indicators (Phase 3+) have something to work with immediately
+    // Prime with enough history for the shorter indicators (RSI14, MACD26,
+    // ATR14, ROC9, EMA50) to be defined almost immediately. EMA200 will
+    // still correctly report "insufficient data" until the replay reaches
+    // 200 candles — that's intentional, not a bug.
+    this._primeCount = options.primeCount ?? 30;
+    this._index = Math.min(this._primeCount, candles.length);
     this._intervalMs = options.intervalMs ?? 2000;
     this._label = options.label ?? 'replay';
     this._timer = null;
@@ -68,6 +73,6 @@ export class ReplayDataProvider extends MarketDataProvider {
   /** Reset the replay position back to the start (used by the "restart" control). */
   reset() {
     if (this._timer) clearInterval(this._timer);
-    this._index = Math.min(20, this._candles.length);
+    this._index = Math.min(this._primeCount, this._candles.length);
   }
 }
