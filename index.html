@@ -14,7 +14,7 @@
   <div id="page">
     <div id="pageHint">
       Tap the floating icon to expand the analyzer.<br />
-      Phase 4 — market-structure detection (swing highs/lows, HH/HL/LH/LL, BOS/CHoCH) added on top of the real indicators. Signal state/strength are still a placeholder — real scoring arrives in Phase 5.
+      Phase 5 — the real weighted multi-confirmation scoring engine is live: trend, momentum, structure, price action, support/resistance, and volatility now combine into an actual BUY/SELL/WAIT/NO TRADE signal. Not yet backtested or paper-traded (Phases 9-10) — strength is an evidence score, not a win probability.
     </div>
   </div>
 
@@ -27,7 +27,7 @@
   <!-- Floating widget: expanded card -->
   <div id="expanded" class="expanded hidden">
     <div id="dragHandle" class="header">
-      <span class="title">MARKET AI (STRUCTURE)</span>
+      <span class="title">MARKET AI (SCORING)</span>
       <div class="header-actions">
         <button id="collapseBtn" title="Collapse">—</button>
       </div>
@@ -85,6 +85,11 @@
         <span id="strengthVal">0/100</span>
       </div>
       <div class="strength-bar"><div id="strengthFill" class="strength-fill"></div></div>
+      <div class="strength-note">Evidence score out of 100 — not a win probability</div>
+      <div class="score-split">
+        <span id="buyScoreVal" class="score-buy">BUY 0</span>
+        <span id="sellScoreVal" class="score-sell">SELL 0</span>
+      </div>
     </div>
 
     <div class="reasons">

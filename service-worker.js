@@ -1,4 +1,4 @@
-const CACHE_NAME = 'market-ai-shell-v4';
+const CACHE_NAME = 'market-ai-shell-v5';
 
 const SHELL_ASSETS = [
   './',
@@ -20,6 +20,8 @@ const SHELL_ASSETS = [
   './js/indicators/index.js',
   './js/structure/swingPoints.js',
   './js/structure/marketStructure.js',
+  './js/signal/priceAction.js',
+  './js/signal/scoringEngine.js',
   './js/worker/engine.worker.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
