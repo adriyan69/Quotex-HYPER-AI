@@ -68,14 +68,14 @@ export class StructureEngine {
   }
 }
 
-function deriveBias(lastHigh, lastLow) {
+export function deriveBias(lastHigh, lastLow) {
   if (!lastHigh || !lastLow || !lastHigh.label || !lastLow.label) return 'INSUFFICIENT';
   if (lastHigh.label === 'HH' && lastLow.label === 'HL') return 'UPTREND';
   if (lastHigh.label === 'LH' && lastLow.label === 'LL') return 'DOWNTREND';
   return 'RANGING';
 }
 
-function biasLabel(bias) {
+export function biasLabel(bias) {
   switch (bias) {
     case 'UPTREND': return 'Uptrend (HH + HL)';
     case 'DOWNTREND': return 'Downtrend (LH + LL)';
@@ -84,7 +84,7 @@ function biasLabel(bias) {
   }
 }
 
-function deriveEvent(bias, lastHigh, lastLow, lastClose, time) {
+export function deriveEvent(bias, lastHigh, lastLow, lastClose, time) {
   if (bias === 'UPTREND' && lastHigh) {
     if (lastClose > lastHigh.price) {
       return { type: 'BOS', direction: 'bullish', label: 'Bullish BOS — trend continuation', price: lastClose, time };
