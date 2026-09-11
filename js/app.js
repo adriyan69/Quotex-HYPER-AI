@@ -182,6 +182,8 @@ function render(payload) {
     stopBtn.disabled = true;
   }
 
+  renderIndicators(payload.indicators);
+
   const stateEl = document.getElementById('signalState');
   stateEl.textContent = STATE_LABELS[payload.signalState] || payload.signalState;
   stateEl.className = 'signal-state ' + (STATE_CLASS[payload.signalState] || '');
@@ -207,4 +209,55 @@ function render(payload) {
 
   document.getElementById('collapsedSignal').textContent =
     (STATE_LABELS[payload.signalState] || '--').split(' ')[0];
+}
+
+function setIndVal(id, text, tone) {
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.classList.remove('ind-bullish', 'ind-bearish', 'ind-neutral');
+  if (tone) el.classList.add(tone);
+}
+
+function toneFromLabel(label) {
+  if (!label) return null;
+  const l = label.toLowerCase();
+  if (l.includes('bullish') || l.includes('oversold') || l.includes('positive') || l.includes('below lower')) return 'ind-bullish';
+  if (l.includes('bearish') || l.includes('overbought') || l.includes('negative') || l.includes('above upper')) return 'ind-bearish';
+  return null;
+}
+
+function renderIndicators(indicators) {
+  if (!indicators) return;
+
+  setIndVal('indTrend', indicators.trend.label, toneFromLabel(indicators.trend.label));
+
+  const rsi = indicators.momentum.rsi;
+  setIndVal(
+    'indRsi',
+    rsi === null ? 'Insufficient data' : `${rsi.toFixed(1)} — ${indicators.momentum.rsiLabel}`,
+    toneFromLabel(indicators.momentum.rsiLabel)
+  );
+
+  const hist = indicators.momentum.macd.histogram;
+  setIndVal(
+    'indMacd',
+    hist === null ? 'Insufficient data' : `${hist.toFixed(6)} — ${indicators.momentum.macdLabel}`,
+    toneFromLabel(indicators.momentum.macdLabel)
+  );
+
+  const roc = indicators.momentum.roc;
+  setIndVal(
+    'indRoc',
+    roc === null ? 'Insufficient data' : `${roc.toFixed(3)}% — ${indicators.momentum.rocLabel}`,
+    toneFromLabel(indicators.momentum.rocLabel)
+  );
+
+  const atrVal = indicators.volatility.atr;
+  setIndVal('indAtr', atrVal === null ? 'Insufficient data' : atrVal.toFixed(6), null);
+
+  setIndVal(
+    'indBollinger',
+    indicators.volatility.bollingerLabel,
+    toneFromLabel(indicators.volatility.bollingerLabel)
+  );
 }
