@@ -1,4 +1,3 @@
-import { atr as computeAtrSeries } from '../indicators/atr.js';
 import { analyzePriceAction } from './priceAction.js';
 
 /**
@@ -28,10 +27,20 @@ import { analyzePriceAction } from './priceAction.js';
  * real historical win rate per strength bucket, from logged outcomes.
  */
 export class ScoringEngine {
-  compute(candles, indicators, structure) {
+  /**
+   * @param {Array} candles - a small recent window (price action + S/R only
+   *   ever look at the last couple of candles; this is NOT the full history)
+   * @param {object} indicators - from RealtimeEngine/IndicatorEngine
+   * @param {object} structure - from RealtimeEngine/StructureEngine
+   * @param {Array<number>} [atrHistory] - rolling recent ATR values, for the
+   *   volatility-regime check. Passed in rather than recomputed from candles
+   *   so this stays O(1) against RealtimeEngine's already-maintained buffer
+   *   instead of re-scanning history (Phase 6).
+   */
+  compute(candles, indicators, structure, atrHistory = []) {
     const priceAction = analyzePriceAction(candles);
     const supportResistance = evaluateSupportResistance(candles, structure, indicators);
-    const regime = evaluateVolatilityRegime(candles);
+    const regime = evaluateVolatilityRegime(atrHistory);
 
     const categories = {
       trend: { weight: 25, ...trendVote(indicators) },
@@ -175,13 +184,13 @@ function evaluateSupportResistance(candles, structure, indicators) {
   return { direction: 'neutral', label: 'Not currently at a confirmed S/R level' };
 }
 
-function evaluateVolatilityRegime(candles) {
-  const atrSeries = computeAtrSeries(candles, 14).filter((v) => v !== null);
-  if (atrSeries.length < 15) {
+function evaluateVolatilityRegime(atrHistory) {
+  const series = atrHistory.filter((v) => v !== null && v !== undefined);
+  if (series.length < 15) {
     return { status: 'UNKNOWN', ratio: 1, label: 'Insufficient data for volatility regime' };
   }
-  const last = atrSeries[atrSeries.length - 1];
-  const lookback = atrSeries.slice(-20, -1);
+  const last = series[series.length - 1];
+  const lookback = series.slice(-20, -1);
   const avg = lookback.reduce((a, b) => a + b, 0) / lookback.length;
   const ratio = avg > 0 ? last / avg : 1;
 
