@@ -14,7 +14,7 @@
   <div id="page">
     <div id="pageHint">
       Tap the floating icon to expand the analyzer.<br />
-      Phase 3 — real technical indicators (EMA/RSI/MACD/ATR/Bollinger/ROC) computed from the replayed candle history. Signal state/strength are still a placeholder — real scoring arrives in Phase 5.
+      Phase 4 — market-structure detection (swing highs/lows, HH/HL/LH/LL, BOS/CHoCH) added on top of the real indicators. Signal state/strength are still a placeholder — real scoring arrives in Phase 5.
     </div>
   </div>
 
@@ -27,7 +27,7 @@
   <!-- Floating widget: expanded card -->
   <div id="expanded" class="expanded hidden">
     <div id="dragHandle" class="header">
-      <span class="title">MARKET AI (INDICATORS)</span>
+      <span class="title">MARKET AI (STRUCTURE)</span>
       <div class="header-actions">
         <button id="collapseBtn" title="Collapse">—</button>
       </div>
@@ -57,6 +57,14 @@
       <div class="ind-row"><span>ROC (9)</span><span id="indRoc" class="ind-val">--</span></div>
       <div class="ind-row"><span>ATR (14)</span><span id="indAtr" class="ind-val">--</span></div>
       <div class="ind-row"><span>Bollinger</span><span id="indBollinger" class="ind-val">--</span></div>
+    </div>
+
+    <div class="indicators">
+      <div class="reasons-title">Market structure</div>
+      <div class="ind-row"><span>Bias</span><span id="structBias" class="ind-val">--</span></div>
+      <div class="ind-row"><span>Last event</span><span id="structEvent" class="ind-val">--</span></div>
+      <div class="ind-row"><span>Last swing high</span><span id="structSwingHigh" class="ind-val">--</span></div>
+      <div class="ind-row"><span>Last swing low</span><span id="structSwingLow" class="ind-val">--</span></div>
     </div>
 
     <div class="data-source">
