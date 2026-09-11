@@ -1,4 +1,4 @@
-const CACHE_NAME = 'market-ai-shell-v6';
+const CACHE_NAME = 'market-ai-shell-v7';
 
 const SHELL_ASSETS = [
   './',
@@ -23,6 +23,7 @@ const SHELL_ASSETS = [
   './js/signal/priceAction.js',
   './js/signal/scoringEngine.js',
   './js/engine/RealtimeEngine.js',
+  './js/alerts/alertManager.js',
   './js/worker/engine.worker.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -55,6 +56,19 @@ self.addEventListener('fetch', (event) => {
         cached ||
         fetch(event.request).catch(() => cached)
       );
+    })
+  );
+});
+
+// Phase 7: focus (or open) the app when a signal notification is tapped.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow('./');
     })
   );
 });

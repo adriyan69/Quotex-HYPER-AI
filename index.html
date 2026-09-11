@@ -14,7 +14,7 @@
   <div id="page">
     <div id="pageHint">
       Tap the floating icon to expand the analyzer.<br />
-      Phase 6 — the analysis loop is now fully incremental: each new candle updates indicators/structure in O(1) instead of re-scanning all history, verified to match the old full-recompute results exactly. Not yet backtested or paper-traded (Phases 9-10) — strength is an evidence score, not a win probability.
+      Phase 7 — optional alerts: enable notifications below to get a device notification, sound, and visual flash on a high-quality BUY/SELL setup (strength 70+, at most once a minute). Notifications only work while this app is open. Not yet backtested or paper-traded (Phases 9-10) — strength is an evidence score, not a win probability.
     </div>
   </div>
 
@@ -27,7 +27,7 @@
   <!-- Floating widget: expanded card -->
   <div id="expanded" class="expanded hidden">
     <div id="dragHandle" class="header">
-      <span class="title">MARKET AI (REALTIME)</span>
+      <span class="title">MARKET AI (ALERTS)</span>
       <div class="header-actions">
         <button id="collapseBtn" title="Collapse">—</button>
       </div>
@@ -76,6 +76,12 @@
           <input type="file" id="fileInput" accept=".csv,.json" hidden />
         </label>
       </div>
+    </div>
+
+    <div class="alerts-block">
+      <div class="reasons-title">Alerts</div>
+      <button id="notifyBtn" class="chip">Enable notifications</button>
+      <div class="alerts-note">Only fires for BUY/SELL and above, strength ≥ 70, at most once per minute. Only while this app is open (no push when fully closed).</div>
     </div>
 
     <div class="signal-block">
