@@ -14,7 +14,7 @@
   <div id="page">
     <div id="pageHint">
       Tap the floating icon to expand the analyzer.<br />
-      Phase 9 — tap the 📊 icon to backtest the current strategy against the loaded dataset (no look-ahead bias — verified). Results are hypothetical and don't model real broker payout/fees. Still not paper-traded live (Phase 10) — strength stays an evidence score, not a win probability.
+      Phase 10 — tap the 📈 icon for the Performance dashboard: real strength-bucket vs actual win-rate numbers, so "90 strength" is never quietly treated as "90% win probability." Numbers come from re-running the backtest, not live execution. Still not real trading — analysis only.
     </div>
   </div>
 
@@ -27,8 +27,9 @@
   <!-- Floating widget: expanded card -->
   <div id="expanded" class="expanded hidden">
     <div id="dragHandle" class="header">
-      <span class="title">MARKET AI (BACKTEST)</span>
+      <span class="title">MARKET AI (DASHBOARD)</span>
       <div class="header-actions">
+        <button id="dashboardBtn" title="Performance dashboard">📈</button>
         <button id="backtestBtn" title="Backtest">📊</button>
         <button id="historyBtn" title="Signal history">🕘</button>
         <button id="collapseBtn" title="Collapse">—</button>
@@ -175,6 +176,25 @@
     <button id="backtestRunBtn" class="btn btn-start backtest-run-btn">Run backtest</button>
 
     <div id="backtestResults" class="backtest-results"></div>
+  </div>
+
+  <!-- Performance dashboard overlay -->
+  <div id="dashboardOverlay" class="history-overlay hidden">
+    <div class="history-header">
+      <span class="title">PERFORMANCE DASHBOARD</span>
+      <button id="dashboardCloseBtn" title="Close">✕</button>
+    </div>
+
+    <div class="backtest-disclaimer">
+      The strength-bucket numbers below come from re-running the backtest against
+      the currently loaded dataset at every strength level, NOT from live trading.
+      Treat "signal strength" as an evidence score, never a win probability — this
+      table exists specifically to keep that honest.
+    </div>
+
+    <button id="dashboardRunBtn" class="btn btn-start backtest-run-btn">Refresh dashboard</button>
+
+    <div id="dashboardResults" class="backtest-results"></div>
   </div>
 
   <script type="module" src="js/app.js"></script>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'market-ai-shell-v9';
+const CACHE_NAME = 'market-ai-shell-v10';
 
 const SHELL_ASSETS = [
   './',
