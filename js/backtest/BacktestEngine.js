@@ -76,6 +76,7 @@ export class BacktestEngine {
         index: i,
         time: candles[i].time,
         signalState: signal.state,
+        strength: signal.strength,
         direction,
         entryPrice,
         futurePrice,
@@ -150,6 +151,8 @@ function summarize(trades, meta) {
     maxLossStreak,
     signalFrequencyPer100,
     byDirection,
+    strengthBuckets: bucketByStrength(trades),
+    hourBuckets: bucketByHour(trades),
     candlesProcessed: meta.candlesProcessed,
     signalsBelowThreshold: meta.signalsBelowThreshold,
     signalsExcludedInsufficientFutureData: meta.signalsExcludedInsufficientFutureData,
@@ -157,6 +160,43 @@ function summarize(trades, meta) {
     holdingPeriod: meta.holdingPeriod,
     recentTrades: trades.slice(-20).reverse(), // newest first, for a preview list — full trade list isn't returned to keep messages small
   };
+}
+
+/**
+ * Groups trades into 10-point strength bands (40-49, 50-59, ... 90-100)
+ * and reports each band's actual win rate. This is THE mechanism that
+ * keeps "signal strength" honest (spec Section 12): it's what lets the
+ * app show, in its own results, that a 90-100 band might only actually
+ * win 60-something percent of the time — rather than ever letting
+ * "strength" quietly get treated as a claimed win probability.
+ */
+function bucketByStrength(trades) {
+  const buckets = {};
+  for (const t of trades) {
+    const band = Math.min(90, Math.floor(t.strength / 10) * 10);
+    const label = band === 90 ? '90-100' : `${band}-${band + 9}`;
+    if (!buckets[label]) buckets[label] = [];
+    buckets[label].push(t);
+  }
+  return Object.keys(buckets)
+    .sort((a, b) => parseInt(a) - parseInt(b))
+    .map((label) => ({ label, ...summarizeSubset(buckets[label]) }));
+}
+
+/** Groups trades by hour-of-day (0-23, from each trade's own candle
+ * timestamp) and reports each hour's win rate. Only hours that actually
+ * have at least one trade are included. */
+function bucketByHour(trades) {
+  const buckets = {};
+  for (const t of trades) {
+    const hour = new Date(t.time).getHours();
+    if (!buckets[hour]) buckets[hour] = [];
+    buckets[hour].push(t);
+  }
+  return Object.keys(buckets)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((hour) => ({ hour, ...summarizeSubset(buckets[hour]) }));
 }
 
 function summarizeSubset(trades) {
