@@ -49,6 +49,11 @@ const dashboardOverlay = document.getElementById('dashboardOverlay');
 const dashboardCloseBtn = document.getElementById('dashboardCloseBtn');
 const dashboardRunBtn = document.getElementById('dashboardRunBtn');
 const dashboardResults = document.getElementById('dashboardResults');
+const mlBtn = document.getElementById('mlBtn');
+const mlOverlay = document.getElementById('mlOverlay');
+const mlCloseBtn = document.getElementById('mlCloseBtn');
+const mlRunBtn = document.getElementById('mlRunBtn');
+const mlResults = document.getElementById('mlResults');
 
 // ---- Alerts: dedup/cooldown decision (AlertManager) + the actual
 // notification/sound/visual-flash triggering (this file, UI thread only —
@@ -836,4 +841,145 @@ function renderDashboard(historyStats, bt) {
   note.className = 'bt-exclusions';
   note.textContent = 'Only one asset/timeframe is ever loaded in this app, so there\u2019s no separate "by asset" or "by timeframe" breakdown to show \u2014 it would just repeat the same row.';
   dashboardResults.appendChild(note);
+}
+
+// ---- ML experiment overlay (Phase 11, optional) ----
+// Entirely separate from the live SIGNAL — this never feeds back into
+// scoringEngine.js. Runs in its own dedicated worker.
+
+let mlWorker = null;
+
+mlBtn.addEventListener('click', () => {
+  mlOverlay.classList.remove('hidden');
+});
+
+mlCloseBtn.addEventListener('click', () => {
+  mlOverlay.classList.add('hidden');
+});
+
+mlRunBtn.addEventListener('click', () => {
+  mlResults.innerHTML = '<div class="backtest-loading">Training…</div>';
+  mlRunBtn.disabled = true;
+
+  if (!mlWorker) {
+    mlWorker = new Worker('js/worker/ml.worker.js', { type: 'module' });
+  }
+  mlWorker.onmessage = (e) => {
+    mlRunBtn.disabled = false;
+    if (e.data.type === 'result') {
+      renderMlResults(e.data.result);
+    } else if (e.data.type === 'error') {
+      mlResults.innerHTML = `<div class="backtest-loading">Training failed: ${e.data.message}</div>`;
+    }
+  };
+  mlWorker.postMessage({
+    type: 'run',
+    payload: { candles: currentCandlesForBacktest, options: { holdingPeriod: 1 } },
+  });
+});
+
+function renderMlResults(r) {
+  mlResults.innerHTML = '';
+
+  if (r.insufficientData) {
+    mlResults.innerHTML = `<div class="backtest-loading">Not enough usable candles yet (have ${r.sampleSize}, need 40+) — let more data load or import a larger file.</div>`;
+    return;
+  }
+
+  const splitTitle = document.createElement('div');
+  splitTitle.className = 'reasons-title';
+  splitTitle.textContent = 'Chronological split (never shuffled)';
+  mlResults.appendChild(splitTitle);
+
+  const splitRows = [
+    ['Train', r.splitSizes.train],
+    ['Validation', r.splitSizes.validation],
+    ['Test (out-of-sample)', r.splitSizes.test],
+  ];
+  for (const [label, value] of splitRows) {
+    const row = document.createElement('div');
+    row.className = 'dash-summary-row';
+    row.innerHTML = `<span>${label}</span><span>${value} candles</span>`;
+    mlResults.appendChild(row);
+  }
+
+  const accTitle = document.createElement('div');
+  accTitle.className = 'reasons-title';
+  accTitle.style.marginTop = '14px';
+  accTitle.textContent = 'Accuracy by split';
+  mlResults.appendChild(accTitle);
+
+  const accRows = [
+    ['Train accuracy', r.trainAccuracy, false],
+    ['Validation accuracy', r.validationAccuracy, false],
+    ['Test accuracy (out-of-sample)', r.testAccuracy, true],
+  ];
+  for (const [label, value, emphasize] of accRows) {
+    const row = document.createElement('div');
+    row.className = 'dash-summary-row';
+    const tone = value >= 55 ? 'tone-good' : value <= 45 ? 'tone-bad' : '';
+    row.innerHTML = `<span>${emphasize ? '<strong>' + label + '</strong>' : label}</span><span class="${tone}">${value.toFixed(1)}%</span>`;
+    mlResults.appendChild(row);
+  }
+
+  if (r.trainAccuracy - r.testAccuracy > 15) {
+    const warn = document.createElement('div');
+    warn.className = 'bt-exclusions';
+    warn.textContent = `Train accuracy is ${(r.trainAccuracy - r.testAccuracy).toFixed(0)} points higher than test accuracy — a sign of overfitting on this small sample, not a model you'd want to trust.`;
+    mlResults.appendChild(warn);
+  }
+
+  const calTitle = document.createElement('div');
+  calTitle.className = 'reasons-title';
+  calTitle.style.marginTop = '14px';
+  calTitle.textContent = 'Predicted probability vs actual outcome (test set)';
+  mlResults.appendChild(calTitle);
+
+  const calTable = document.createElement('div');
+  calTable.className = 'dash-bucket-table';
+  const calHeader = document.createElement('div');
+  calHeader.className = 'dash-bucket-row header';
+  calHeader.innerHTML = '<span>Predicted</span><span>n</span><span>Actual up-rate</span>';
+  calTable.appendChild(calHeader);
+  for (const c of r.calibration) {
+    const row = document.createElement('div');
+    row.className = 'dash-bucket-row';
+    const tone = c.actualUpRate >= 50 ? 'tone-good' : 'tone-bad';
+    row.innerHTML = `
+      <span>${c.label}</span>
+      <span>${c.count}</span>
+      <span>${c.actualUpRate.toFixed(1)}%</span>
+      <div class="dash-bucket-bar-wrap"><div class="dash-bucket-bar ${tone}" style="width:${c.actualUpRate.toFixed(0)}%"></div></div>
+    `;
+    calTable.appendChild(row);
+  }
+  mlResults.appendChild(calTable);
+
+  const wfTitle = document.createElement('div');
+  wfTitle.className = 'reasons-title';
+  wfTitle.style.marginTop = '14px';
+  wfTitle.textContent = 'Walk-forward validation (expanding window)';
+  mlResults.appendChild(wfTitle);
+
+  if (r.walkForward.ran) {
+    const wfRow = document.createElement('div');
+    wfRow.className = 'dash-summary-row';
+    wfRow.innerHTML = `<span>Average accuracy across ${r.walkForward.folds} folds</span><span>${r.walkForward.averageAccuracy.toFixed(1)}%</span>`;
+    mlResults.appendChild(wfRow);
+    const foldsRow = document.createElement('div');
+    foldsRow.className = 'bt-exclusions';
+    foldsRow.textContent = `Per-fold: ${r.walkForward.foldAccuracies.map((a) => a.toFixed(0) + '%').join(', ')} — each fold retrains on everything before it and tests only on the next chronological chunk.`;
+    mlResults.appendChild(foldsRow);
+  } else {
+    const none = document.createElement('div');
+    none.className = 'bt-exclusions';
+    none.textContent = `Walk-forward not run: ${r.walkForward.reason}`;
+    mlResults.appendChild(none);
+  }
+
+  const noteFinal = document.createElement('div');
+  noteFinal.className = 'bt-exclusions';
+  noteFinal.style.marginTop = '10px';
+  noteFinal.textContent = 'This experiment never feeds back into the live SIGNAL — scoringEngine.js remains 100% rule-based regardless of anything shown here.';
+  mlResults.appendChild(noteFinal);
 }
