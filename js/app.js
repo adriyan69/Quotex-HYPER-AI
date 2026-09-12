@@ -1,4 +1,5 @@
 import { AlertManager } from './alerts/alertManager.js';
+import { getSignals, clearHistory, countSignals } from './history/historyStore.js';
 
 // ---- Service worker registration (required for installability) ----
 if ('serviceWorker' in navigator) {
@@ -30,6 +31,12 @@ const restartBtn = document.getElementById('restartBtn');
 const useSampleBtn = document.getElementById('useSampleBtn');
 const fileInput = document.getElementById('fileInput');
 const notifyBtn = document.getElementById('notifyBtn');
+const historyBtn = document.getElementById('historyBtn');
+const historyOverlay = document.getElementById('historyOverlay');
+const historyCloseBtn = document.getElementById('historyCloseBtn');
+const historyList = document.getElementById('historyList');
+const historyCount = document.getElementById('historyCount');
+const historyClearBtn = document.getElementById('historyClearBtn');
 
 // ---- Alerts: dedup/cooldown decision (AlertManager) + the actual
 // notification/sound/visual-flash triggering (this file, UI thread only —
@@ -401,4 +408,104 @@ function renderStructure(structure) {
     structure.lastSwingLow ? `${structure.lastSwingLow.price.toFixed(5)} (${structure.lastSwingLow.label ?? '--'})` : '--',
     null
   );
+}
+
+// ---- Signal history overlay (Phase 8) ----
+
+const STATE_TONE_CLASS = {
+  STRONG_BUY: 'state-buy-side', BUY: 'state-buy-side',
+  STRONG_SELL: 'state-sell-side', SELL: 'state-sell-side',
+  WAIT: 'state-neutral', NO_TRADE: 'state-neutral',
+};
+
+let historyStateFilter = 'ALL';
+let historyMinStrength = 0;
+
+historyBtn.addEventListener('click', () => {
+  historyOverlay.classList.remove('hidden');
+  refreshHistoryList();
+});
+
+historyCloseBtn.addEventListener('click', () => {
+  historyOverlay.classList.add('hidden');
+});
+
+document.querySelectorAll('[data-state-filter]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-state-filter]').forEach((b) => b.classList.remove('chip-active'));
+    btn.classList.add('chip-active');
+    historyStateFilter = btn.dataset.stateFilter;
+    refreshHistoryList();
+  });
+});
+
+document.querySelectorAll('[data-min-strength]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-min-strength]').forEach((b) => b.classList.remove('chip-active'));
+    btn.classList.add('chip-active');
+    historyMinStrength = Number(btn.dataset.minStrength);
+    refreshHistoryList();
+  });
+});
+
+historyClearBtn.addEventListener('click', async () => {
+  if (!confirm('Clear all logged signal history? This cannot be undone.')) return;
+  await clearHistory();
+  refreshHistoryList();
+});
+
+async function refreshHistoryList() {
+  const [records, total] = await Promise.all([
+    getSignals({ limit: 200, stateFilter: historyStateFilter, minStrength: historyMinStrength }),
+    countSignals(),
+  ]);
+
+  historyCount.textContent = `${total} signal${total === 1 ? '' : 's'} logged total \u2014 showing ${records.length}`;
+
+  historyList.innerHTML = '';
+  if (!records.length) {
+    const empty = document.createElement('div');
+    empty.className = 'history-empty';
+    empty.textContent = total === 0 ? 'No signals logged yet \u2014 tap START to begin.' : 'No signals match this filter.';
+    historyList.appendChild(empty);
+    return;
+  }
+
+  for (const record of records) {
+    historyList.appendChild(renderHistoryItem(record));
+  }
+}
+
+function renderHistoryItem(record) {
+  const item = document.createElement('div');
+  item.className = 'history-item';
+
+  const top = document.createElement('div');
+  top.className = 'history-item-top';
+
+  const stateEl = document.createElement('span');
+  stateEl.className = 'history-item-state ' + (STATE_TONE_CLASS[record.signalState] || 'state-neutral');
+  stateEl.textContent = STATE_LABELS[record.signalState] || record.signalState;
+
+  const strengthEl = document.createElement('span');
+  strengthEl.className = 'history-item-strength';
+  strengthEl.textContent = `${record.strength}/100`;
+
+  top.appendChild(stateEl);
+  top.appendChild(strengthEl);
+
+  const meta = document.createElement('div');
+  meta.className = 'history-item-meta';
+  const time = new Date(record.timestamp).toLocaleString();
+  const price = record.entryPrice !== null && record.entryPrice !== undefined ? record.entryPrice.toFixed(5) : '--';
+  meta.textContent = `${time} \u00b7 ${record.asset} \u00b7 ${record.timeframe} \u00b7 price ${price}`;
+
+  const reason = document.createElement('div');
+  reason.className = 'history-item-reason';
+  reason.textContent = record.reason || '';
+
+  item.appendChild(top);
+  item.appendChild(meta);
+  item.appendChild(reason);
+  return item;
 }
