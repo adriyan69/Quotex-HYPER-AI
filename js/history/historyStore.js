@@ -96,6 +96,44 @@ export async function countSignals() {
   });
 }
 
+/**
+ * Aggregate descriptive stats over the FULL logged history (not filtered) —
+ * total count, a breakdown by signal state, and the average strength.
+ * Computed in a single cursor pass rather than materializing every record
+ * into an array just to count them.
+ *
+ * NOTE: this describes signals actually logged from real app sessions
+ * (Start/replay runs you've done) — it has no outcome/win-rate data,
+ * because live-logged ticks were never graded against a future price.
+ * For actual win-rate numbers, see the Backtest engine (Phase 9), which
+ * the performance dashboard also draws on.
+ */
+export async function getStats() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const counts = { STRONG_BUY: 0, BUY: 0, WAIT: 0, SELL: 0, STRONG_SELL: 0, NO_TRADE: 0 };
+    let total = 0;
+    let strengthSum = 0;
+
+    const req = store.openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) {
+        resolve({ total, counts, averageStrength: total ? strengthSum / total : null });
+        return;
+      }
+      const r = cursor.value;
+      total += 1;
+      if (counts[r.signalState] !== undefined) counts[r.signalState] += 1;
+      strengthSum += r.strength || 0;
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
 export async function clearHistory() {
   const db = await openDB();
   return new Promise((resolve, reject) => {
