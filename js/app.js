@@ -44,6 +44,11 @@ const backtestOverlay = document.getElementById('backtestOverlay');
 const backtestCloseBtn = document.getElementById('backtestCloseBtn');
 const backtestRunBtn = document.getElementById('backtestRunBtn');
 const backtestResults = document.getElementById('backtestResults');
+const dashboardBtn = document.getElementById('dashboardBtn');
+const dashboardOverlay = document.getElementById('dashboardOverlay');
+const dashboardCloseBtn = document.getElementById('dashboardCloseBtn');
+const dashboardRunBtn = document.getElementById('dashboardRunBtn');
+const dashboardResults = document.getElementById('dashboardResults');
 
 // ---- Alerts: dedup/cooldown decision (AlertManager) + the actual
 // notification/sound/visual-flash triggering (this file, UI thread only —
@@ -649,4 +654,186 @@ function renderBacktestResults(r) {
     item.innerHTML = `<span>${time} ${t.direction} @ ${t.entryPrice.toFixed(5)}</span><span class="${t.win ? 'bt-trade-win' : 'bt-trade-loss'}">${t.win ? 'WIN' : 'LOSS'} ${t.return >= 0 ? '+' : ''}${t.return.toFixed(5)}</span>`;
     backtestResults.appendChild(item);
   }
+}
+
+// ---- Performance dashboard (Phase 10) ----
+// Combines two honestly-distinct data sources, kept visually separate so
+// they're never confused for one another:
+//   1. The logged signal history (Phase 8) — what the app actually showed
+//      you, across however many runs/datasets you've had loaded over time.
+//   2. A fresh backtest re-run (Phase 9's engine, at minStrength=0 to
+//      cover every strength band) against the CURRENTLY loaded dataset —
+//      this is what supplies the graded win/loss numbers, since the
+//      history log has no ground-truth outcome to grade against.
+// Neither of these is "live trading performance" — there is none yet.
+
+let dashboardWorker = null;
+
+dashboardBtn.addEventListener('click', () => {
+  dashboardOverlay.classList.remove('hidden');
+  runDashboard();
+});
+
+dashboardCloseBtn.addEventListener('click', () => {
+  dashboardOverlay.classList.add('hidden');
+});
+
+dashboardRunBtn.addEventListener('click', runDashboard);
+
+async function runDashboard() {
+  dashboardResults.innerHTML = '<div class="backtest-loading">Loading…</div>';
+  dashboardRunBtn.disabled = true;
+
+  const historyStats = await computeHistoryStats();
+
+  if (!dashboardWorker) {
+    dashboardWorker = new Worker('js/worker/backtest.worker.js', { type: 'module' });
+  }
+  dashboardWorker.onmessage = (e) => {
+    dashboardRunBtn.disabled = false;
+    if (e.data.type === 'result') {
+      renderDashboard(historyStats, e.data.result);
+    } else if (e.data.type === 'error') {
+      dashboardResults.innerHTML = `<div class="backtest-loading">Dashboard failed: ${e.data.message}</div>`;
+    }
+  };
+  dashboardWorker.postMessage({
+    type: 'run',
+    payload: { candles: currentCandlesForBacktest, options: { minStrength: 0, holdingPeriod: 1 } },
+  });
+}
+
+async function computeHistoryStats() {
+  const records = await getSignals({ limit: 5000, stateFilter: 'ALL', minStrength: 0 });
+  const counts = { STRONG_BUY: 0, BUY: 0, WAIT: 0, SELL: 0, STRONG_SELL: 0, NO_TRADE: 0 };
+  let strengthSum = 0;
+  let strengthCount = 0;
+
+  for (const r of records) {
+    if (counts[r.signalState] !== undefined) counts[r.signalState]++;
+    if (r.signalState !== 'NO_TRADE') {
+      strengthSum += r.strength;
+      strengthCount++;
+    }
+  }
+
+  return {
+    total: records.length,
+    counts,
+    avgStrength: strengthCount ? strengthSum / strengthCount : null,
+  };
+}
+
+function renderDashboard(historyStats, bt) {
+  dashboardResults.innerHTML = '';
+
+  const histTitle = document.createElement('div');
+  histTitle.className = 'reasons-title';
+  histTitle.textContent = 'From your logged signal history';
+  dashboardResults.appendChild(histTitle);
+
+  const rows = [
+    ['Total signals logged', historyStats.total],
+    ['STRONG BUY', historyStats.counts.STRONG_BUY],
+    ['BUY', historyStats.counts.BUY],
+    ['WAIT', historyStats.counts.WAIT],
+    ['SELL', historyStats.counts.SELL],
+    ['STRONG SELL', historyStats.counts.STRONG_SELL],
+    ['NO TRADE', historyStats.counts.NO_TRADE],
+    ['Avg strength (excl. NO TRADE)', historyStats.avgStrength !== null ? historyStats.avgStrength.toFixed(1) : '--'],
+  ];
+  for (const [label, value] of rows) {
+    const row = document.createElement('div');
+    row.className = 'dash-summary-row';
+    row.innerHTML = `<span>${label}</span><span>${value}</span>`;
+    dashboardResults.appendChild(row);
+  }
+
+  const btTitle = document.createElement('div');
+  btTitle.className = 'reasons-title';
+  btTitle.style.marginTop = '14px';
+  btTitle.textContent = `Backtest re-run on current dataset (all strengths, holding 1 candle)`;
+  dashboardResults.appendChild(btTitle);
+
+  if (bt.totalTrades === 0) {
+    const none = document.createElement('div');
+    none.className = 'backtest-loading';
+    none.textContent = 'No qualifying trades in the current dataset yet.';
+    dashboardResults.appendChild(none);
+    return;
+  }
+
+  const btRows = [
+    ['Total trades', bt.totalTrades],
+    ['Win rate', `${bt.winRate.toFixed(1)}%`],
+    ['Wins / Losses', `${bt.wins} / ${bt.losses}`],
+    ['Max win streak', bt.maxWinStreak],
+    ['Max loss streak', bt.maxLossStreak],
+  ];
+  for (const [label, value] of btRows) {
+    const row = document.createElement('div');
+    row.className = 'dash-summary-row';
+    row.innerHTML = `<span>${label}</span><span>${value}</span>`;
+    dashboardResults.appendChild(row);
+  }
+
+  const bucketTitle = document.createElement('div');
+  bucketTitle.className = 'reasons-title';
+  bucketTitle.style.marginTop = '14px';
+  bucketTitle.textContent = 'Signal strength vs actual win rate';
+  dashboardResults.appendChild(bucketTitle);
+
+  const bucketTable = document.createElement('div');
+  bucketTable.className = 'dash-bucket-table';
+  const header = document.createElement('div');
+  header.className = 'dash-bucket-row header';
+  header.innerHTML = '<span>Strength</span><span>Trades</span><span>Win rate</span>';
+  bucketTable.appendChild(header);
+
+  for (const b of bt.strengthBuckets) {
+    const row = document.createElement('div');
+    row.className = 'dash-bucket-row';
+    const wr = b.winRate;
+    const tone = wr === null ? '' : wr >= 50 ? 'tone-good' : 'tone-bad';
+    row.innerHTML = `
+      <span>${b.label}</span>
+      <span>${b.total}</span>
+      <span>${wr !== null ? wr.toFixed(1) + '%' : '--'}</span>
+      <div class="dash-bucket-bar-wrap"><div class="dash-bucket-bar ${tone}" style="width:${wr !== null ? wr.toFixed(0) : 0}%"></div></div>
+    `;
+    bucketTable.appendChild(row);
+  }
+  dashboardResults.appendChild(bucketTable);
+
+  const hourTitle = document.createElement('div');
+  hourTitle.className = 'reasons-title';
+  hourTitle.textContent = 'Results by hour (from candle timestamps)';
+  dashboardResults.appendChild(hourTitle);
+
+  const hourTable = document.createElement('div');
+  hourTable.className = 'dash-bucket-table';
+  const hourHeader = document.createElement('div');
+  hourHeader.className = 'dash-bucket-row header';
+  hourHeader.innerHTML = '<span>Hour</span><span>Trades</span><span>Win rate</span>';
+  hourTable.appendChild(hourHeader);
+
+  for (const h of bt.hourBuckets) {
+    const row = document.createElement('div');
+    row.className = 'dash-bucket-row';
+    const wr = h.winRate;
+    const tone = wr === null ? '' : wr >= 50 ? 'tone-good' : 'tone-bad';
+    row.innerHTML = `
+      <span>${String(h.hour).padStart(2, '0')}:00</span>
+      <span>${h.total}</span>
+      <span>${wr !== null ? wr.toFixed(1) + '%' : '--'}</span>
+      <div class="dash-bucket-bar-wrap"><div class="dash-bucket-bar ${tone}" style="width:${wr !== null ? wr.toFixed(0) : 0}%"></div></div>
+    `;
+    hourTable.appendChild(row);
+  }
+  dashboardResults.appendChild(hourTable);
+
+  const note = document.createElement('div');
+  note.className = 'bt-exclusions';
+  note.textContent = 'Only one asset/timeframe is ever loaded in this app, so there\u2019s no separate "by asset" or "by timeframe" breakdown to show \u2014 it would just repeat the same row.';
+  dashboardResults.appendChild(note);
 }
