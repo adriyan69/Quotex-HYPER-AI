@@ -1,5 +1,7 @@
 import { AlertManager } from './alerts/alertManager.js';
 import { getSignals, clearHistory, countSignals } from './history/historyStore.js';
+import { sampleCandles } from './core/sampleData.js';
+import { normalizeCandles } from './core/CandleNormalizer.js';
 
 // ---- Service worker registration (required for installability) ----
 if ('serviceWorker' in navigator) {
@@ -37,6 +39,11 @@ const historyCloseBtn = document.getElementById('historyCloseBtn');
 const historyList = document.getElementById('historyList');
 const historyCount = document.getElementById('historyCount');
 const historyClearBtn = document.getElementById('historyClearBtn');
+const backtestBtn = document.getElementById('backtestBtn');
+const backtestOverlay = document.getElementById('backtestOverlay');
+const backtestCloseBtn = document.getElementById('backtestCloseBtn');
+const backtestRunBtn = document.getElementById('backtestRunBtn');
+const backtestResults = document.getElementById('backtestResults');
 
 // ---- Alerts: dedup/cooldown decision (AlertManager) + the actual
 // notification/sound/visual-flash triggering (this file, UI thread only —
@@ -214,10 +221,15 @@ restartBtn.addEventListener('click', () => {
 // File reading happens here on the UI thread (Workers can't use the File
 // API the same way), gets normalized, then handed to the worker as plain
 // data via postMessage — the worker never touches the File object itself.
+// currentCandlesForBacktest tracks whichever dataset is active, so the
+// Backtest overlay always runs against what's actually loaded.
+let currentCandlesForBacktest = normalizeCandles(sampleCandles);
+
 useSampleBtn.addEventListener('click', () => {
   engine.postMessage({ type: 'restart' }); // safest default: restart the bundled sample
   setActiveSourceChip(useSampleBtn);
   document.getElementById('datasetLabel').textContent = 'Synthetic sample (not real market data)';
+  currentCandlesForBacktest = normalizeCandles(sampleCandles);
 });
 
 fileInput.addEventListener('change', async (e) => {
@@ -225,7 +237,7 @@ fileInput.addEventListener('change', async (e) => {
   if (!file) return;
 
   const text = await file.text();
-  const { normalizeCandles, parseCandleCSV } = await import('./core/CandleNormalizer.js');
+  const { parseCandleCSV } = await import('./core/CandleNormalizer.js');
 
   let candles;
   try {
@@ -244,6 +256,7 @@ fileInput.addEventListener('change', async (e) => {
     return;
   }
 
+  currentCandlesForBacktest = candles;
   engine.postMessage({ type: 'loadCandles', payload: { candles, label: file.name } });
   setActiveSourceChip(fileInput.closest('.chip'));
   document.getElementById('datasetLabel').textContent = `${file.name} (${candles.length} candles)`;
@@ -508,4 +521,132 @@ function renderHistoryItem(record) {
   item.appendChild(meta);
   item.appendChild(reason);
   return item;
+}
+
+// ---- Backtest overlay (Phase 9) ----
+// Runs in its own dedicated Worker, separate from the live engine.worker.js
+// loop, so a potentially heavier one-off computation never competes with
+// live analysis.
+
+let backtestMinStrength = 70;
+let backtestHoldingPeriod = 1;
+let backtestWorker = null;
+
+backtestBtn.addEventListener('click', () => {
+  backtestOverlay.classList.remove('hidden');
+});
+
+backtestCloseBtn.addEventListener('click', () => {
+  backtestOverlay.classList.add('hidden');
+});
+
+document.querySelectorAll('[data-bt-strength]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-bt-strength]').forEach((b) => b.classList.remove('chip-active'));
+    btn.classList.add('chip-active');
+    backtestMinStrength = Number(btn.dataset.btStrength);
+  });
+});
+
+document.querySelectorAll('[data-bt-holding]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-bt-holding]').forEach((b) => b.classList.remove('chip-active'));
+    btn.classList.add('chip-active');
+    backtestHoldingPeriod = Number(btn.dataset.btHolding);
+  });
+});
+
+backtestRunBtn.addEventListener('click', () => {
+  backtestResults.innerHTML = '<div class="backtest-loading">Running backtest…</div>';
+  backtestRunBtn.disabled = true;
+
+  if (!backtestWorker) {
+    backtestWorker = new Worker('js/worker/backtest.worker.js', { type: 'module' });
+    backtestWorker.onmessage = (e) => {
+      backtestRunBtn.disabled = false;
+      if (e.data.type === 'result') {
+        renderBacktestResults(e.data.result);
+      } else if (e.data.type === 'error') {
+        backtestResults.innerHTML = `<div class="backtest-loading">Backtest failed: ${e.data.message}</div>`;
+      }
+    };
+  }
+
+  backtestWorker.postMessage({
+    type: 'run',
+    payload: {
+      candles: currentCandlesForBacktest,
+      options: { minStrength: backtestMinStrength, holdingPeriod: backtestHoldingPeriod },
+    },
+  });
+});
+
+function statTone(value, goodIfAbove) {
+  if (value === null || value === undefined) return '';
+  return value >= goodIfAbove ? 'tone-good' : 'tone-bad';
+}
+
+function renderBacktestResults(r) {
+  backtestResults.innerHTML = '';
+
+  if (r.totalTrades === 0) {
+    backtestResults.innerHTML = '<div class="backtest-loading">No qualifying trades at this threshold/holding period — try lowering the minimum strength.</div>';
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'bt-stat-grid';
+
+  const stats = [
+    ['Total trades', r.totalTrades, ''],
+    ['Win rate', `${r.winRate.toFixed(1)}%`, statTone(r.winRate, 50)],
+    ['Wins / Losses', `${r.wins} / ${r.losses}`, ''],
+    ['Profit factor', r.profitFactor === Infinity ? '∞' : r.profitFactor.toFixed(2), statTone(r.profitFactor === Infinity ? 99 : r.profitFactor, 1)],
+    ['Avg return', r.averageReturn.toFixed(6), statTone(r.averageReturn, 0)],
+    ['Max drawdown', r.maxDrawdown.toFixed(6), ''],
+    ['Max win streak', r.maxWinStreak, ''],
+    ['Max loss streak', r.maxLossStreak, ''],
+    ['Signal freq.', `${r.signalFrequencyPer100.toFixed(1)}/100 candles`, ''],
+    ['Candles processed', r.candlesProcessed, ''],
+  ];
+
+  for (const [label, value, tone] of stats) {
+    const stat = document.createElement('div');
+    stat.className = 'bt-stat';
+    stat.innerHTML = `<div class="bt-stat-label">${label}</div><div class="bt-stat-value ${tone}">${value}</div>`;
+    grid.appendChild(stat);
+  }
+  backtestResults.appendChild(grid);
+
+  const directionTitle = document.createElement('div');
+  directionTitle.className = 'reasons-title';
+  directionTitle.textContent = 'By direction';
+  backtestResults.appendChild(directionTitle);
+
+  for (const dir of ['BUY', 'SELL']) {
+    const d = r.byDirection[dir];
+    const row = document.createElement('div');
+    row.className = 'bt-direction-row';
+    row.innerHTML = `<span>${dir}-side (${d.total})</span><span>${d.total ? d.winRate.toFixed(1) + '% win rate' : '--'}</span>`;
+    backtestResults.appendChild(row);
+  }
+
+  const exclusions = document.createElement('div');
+  exclusions.className = 'bt-exclusions';
+  exclusions.textContent = `${r.signalsBelowThreshold} signal(s) excluded below strength ${r.minStrength}; ${r.signalsExcludedInsufficientFutureData} excluded near the end of the dataset (no future candle to grade against).`;
+  backtestResults.appendChild(exclusions);
+
+  const recentTitle = document.createElement('div');
+  recentTitle.className = 'reasons-title';
+  recentTitle.style.marginTop = '10px';
+  recentTitle.textContent = 'Recent trades (newest first)';
+  backtestResults.appendChild(recentTitle);
+
+  for (const t of r.recentTrades) {
+    const item = document.createElement('div');
+    item.className = 'bt-trade-item';
+    const time = new Date(t.time).toLocaleTimeString();
+    item.innerHTML = `<span>${time} ${t.direction} @ ${t.entryPrice.toFixed(5)}</span><span class="${t.win ? 'bt-trade-win' : 'bt-trade-loss'}">${t.win ? 'WIN' : 'LOSS'} ${t.return >= 0 ? '+' : ''}${t.return.toFixed(5)}</span>`;
+    backtestResults.appendChild(item);
+  }
 }
