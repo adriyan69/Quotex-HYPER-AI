@@ -3,6 +3,7 @@ import { sampleCandles } from '../core/sampleData.js';
 import { normalizeCandles } from '../core/CandleNormalizer.js';
 import { RealtimeEngine } from '../engine/RealtimeEngine.js';
 import { ScoringEngine } from '../signal/scoringEngine.js';
+import { addSignal } from '../history/historyStore.js';
 
 // The engine only ever talks to a MarketDataProvider through its interface.
 // Right now that's ReplayDataProvider fed by either the bundled synthetic
@@ -71,6 +72,38 @@ function buildPayload(indicatorsAndStructure, marketStatus) {
   };
 }
 
+// Phase 8: log every real tick's signal to the persistent history store
+// (step 14 of the spec's real-time loop). Only real ticks are logged — not
+// the initial post-priming snapshot, and not the stop/restart placeholder
+// payloads — so the log reflects actual market events, not UI state
+// changes. Logging failures are swallowed (best-effort): a full IndexedDB
+// quota or a browser without IndexedDB support shouldn't break analysis.
+function logPayload(payload) {
+  addSignal({
+    timestamp: payload.timestamp,
+    asset: payload.asset,
+    timeframe: payload.timeframe,
+    signalState: payload.signalState,
+    strength: payload.strength,
+    buyScore: payload.buyScore,
+    sellScore: payload.sellScore,
+    entryPrice: payload.lastCandle ? payload.lastCandle.close : null,
+    reason: payload.reasons && payload.reasons[0] ? payload.reasons[0] : '',
+    indicators: {
+      trendLabel: payload.indicators.trend.label,
+      rsi: payload.indicators.momentum.rsi,
+      macdHistogram: payload.indicators.momentum.macd.histogram,
+      roc: payload.indicators.momentum.roc,
+      atr: payload.indicators.volatility.atr,
+      bollingerLabel: payload.indicators.volatility.bollingerLabel,
+    },
+    structure: {
+      bias: payload.structure.bias,
+      eventLabel: payload.structure.event ? payload.structure.event.label : null,
+    },
+  }).catch((err) => console.error('Failed to log signal history', err));
+}
+
 async function postCurrentSnapshot() {
   const status = await provider.getMarketStatus();
   if (!rt.lastCandle) {
@@ -114,7 +147,9 @@ self.onmessage = async (e) => {
       }
       rt.ingest(event.candle);
       provider.getMarketStatus().then((status) => {
-        self.postMessage(buildPayload({ indicators: rt.lastIndicators, structure: rt.lastStructure }, status.status));
+        const payload = buildPayload({ indicators: rt.lastIndicators, structure: rt.lastStructure }, status.status);
+        logPayload(payload);
+        self.postMessage(payload);
       });
     });
     await postCurrentSnapshot(); // immediate first update, using the primed state
